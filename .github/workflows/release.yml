@@ -1,0 +1,29 @@
+name: Publish portable release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build portable archive
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - name: Publish versioned prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME artifacts/JetPane-portable.zip artifacts/SHA256SUMS.txt --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME artifacts/JetPane-portable.zip artifacts/SHA256SUMS.txt --prerelease --generate-notes --title "JetPane $env:GITHUB_REF_NAME"
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }

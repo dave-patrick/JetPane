@@ -4,7 +4,7 @@
 
 <p align="center">A portable Windows tray utility for saved desktop arrangements, visual placement regions, and keyboard control across multiple monitors.</p>
 
-<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/latest">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
+<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/tag/v1.1.0">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
 
 ## Run it
 
