@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+artifacts/
+publish/
+graft/
+.sites/
+settings.json*
+crash.log
+*.wpilot
+*.tmp
+*.user
+*.pdb
+.DS_Store
+Thumbs.db

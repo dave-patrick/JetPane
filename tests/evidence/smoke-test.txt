@@ -1,0 +1,1 @@
+PASS: tray, menus, hotkey registration, event loop and clean shutdown

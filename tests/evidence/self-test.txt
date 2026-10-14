@@ -1,0 +1,33 @@
+PASS: Layout 1 stays in work area
+PASS: Layout 1 covers odd pixel dimensions exactly
+PASS: Layout 1 has no overlapping slots
+PASS: Layout 2 stays in work area
+PASS: Layout 2 covers odd pixel dimensions exactly
+PASS: Layout 2 has no overlapping slots
+PASS: Layout 3 stays in work area
+PASS: Layout 3 covers odd pixel dimensions exactly
+PASS: Layout 3 has no overlapping slots
+PASS: Layout 4 stays in work area
+PASS: Layout 4 covers odd pixel dimensions exactly
+PASS: Layout 4 has no overlapping slots
+PASS: JSON round-trip preserves state and order
+PASS: Unsupported import schema rejected
+PASS: Window enumeration respects built-in exclusions
+PASS: Custom modifiers and function key parsed
+PASS: Windows modifier and numeric key parsed
+PASS: Equivalent duplicate shortcuts rejected
+PASS: Visual location move preserves size and negative coordinates
+PASS: Visual corner resize changes both dimensions
+PASS: Visual resize enforces minimum dimensions
+PASS: Locations and their shortcuts survive JSON round-trip
+DISPLAY: \\.\DISPLAY1 bounds={X=-182,Y=1440,Width=2880,Height=1800} work={X=-86,Y=1440,Width=2784,Height=1800}
+PASS: Win32 move succeeds on \\.\DISPLAY1
+PASS: Window lands at exact coordinates on \\.\DISPLAY1
+PASS: Minimized state restored on \\.\DISPLAY1
+PASS: Maximized state restored on \\.\DISPLAY1
+DISPLAY: \\.\DISPLAY2 bounds={X=0,Y=0,Width=2560,Height=1440} work={X=60,Y=0,Width=2500,Height=1440}
+PASS: Win32 move succeeds on \\.\DISPLAY2
+PASS: Window lands at exact coordinates on \\.\DISPLAY2
+PASS: Minimized state restored on \\.\DISPLAY2
+PASS: Maximized state restored on \\.\DISPLAY2
+PASS: Disconnected-monitor positions clamped to a connected work area
