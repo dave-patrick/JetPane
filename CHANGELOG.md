@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- Publisher metadata, About/help credits and repository/site records now identify Atomic 22 Industries.
+
+
 ## 1.1.0 — 2026-10-14
 
 Initial JetPane repository release, continuing the local WindowPilot prototype.
