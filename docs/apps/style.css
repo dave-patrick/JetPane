@@ -2,3 +2,7 @@
 h3{line-height:1.35}.lane h2,.queue h2{font-size:1.5rem;line-height:1.35}.stage h2{margin-top:12px}button:disabled{cursor:default;background:#263b52;color:#c2d1e2}
 
 header .brand{width:220px;max-height:85px;object-fit:contain}.help>h1{margin-top:50px}.help>nav{margin-bottom:35px}.help p{max-width:70ch}
+
+/* Atomic 22 directory: explicit charcoal theme, independent of device appearance. */
+html,body{background:#080b10;color:#edf2fa;color-scheme:dark}.directory-preview{background:#101923}.project-row:hover{background:#142235}header,footer,.project-row{border-color:#293748}
+
