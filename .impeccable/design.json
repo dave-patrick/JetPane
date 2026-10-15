@@ -1,0 +1,12 @@
+{
+  "surface": "docs",
+  "mode": "persuade",
+  "theme": "dark",
+  "publisher": "Atomic 22 Industries",
+  "colors": {
+    "background": "#0c131d",
+    "foreground": "#edf2fa",
+    "accent": "#78b6ff"
+  },
+  "breakpoint": 760
+}

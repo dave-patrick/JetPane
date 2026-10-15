@@ -7,3 +7,5 @@ Profiles, snapping and locations are separate modes. Monitor-geometry assignment
 Static GitHub Pages landing page lives in docs, with an illustrative browser-only arrangement demo. Validate using node scripts/check-site.mjs. No backend or dependency installation is needed. Windows build and Pages deploy workflows live in .github/workflows. Portable binaries are release assets, never Git blobs. Preserve the existing MIT license. Approved raster branding is in assets/brand; keep prior explorations in assets/design-archive distinct. Documentation must distinguish tests from unverified docking/login/application behavior.
 
 - The app publisher is Atomic 22 Industries. Keep publisher.json, package metadata and first-party app/site credits consistent; preserve existing licence and third-party attribution.
+
+- Public landing pages use dark app-specific compositions with real approved brand assets; shared Atomic 22 navigation links to the blue Notes directory. Publish only docs/ via GitHub Pages. Never serve or publish private workspace data.
