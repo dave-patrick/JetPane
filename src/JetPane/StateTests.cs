@@ -7,7 +7,7 @@ static partial class SelfTest
     public static void RunStateTests()
     {
         var results = new List<string>();
-        try { StateTests.Run((ok, name) => { if (!ok) throw new Exception("FAIL: " + name); results.Add("PASS: " + name); }); }
+        try { void Check(bool ok, string name) { if (!ok) throw new Exception("FAIL: " + name); results.Add("PASS: " + name); } StateTests.Run(Check); UpdateTests.Run(Check); }
         catch (Exception e) { results.Add(e.ToString()); Environment.ExitCode = 1; }
         File.WriteAllLines(Path.Combine(AppContext.BaseDirectory, "state-test.txt"), results);
     }

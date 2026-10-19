@@ -6,7 +6,7 @@ Published by **Atomic 22 Industries**.
 
 <p align="center">A portable Windows tray utility for saved desktop arrangements, visual placement regions, and keyboard control across multiple monitors.</p>
 
-<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/tag/v1.1.3">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
+<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/tag/v1.1.4">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
 
 ## Run it
 
@@ -34,6 +34,10 @@ The diagram is an actual rendered application preview using a clearly labeled ex
 
 Draw a region, move it, resize its handles, or set exact pixel coordinates. Give it a name, assign a shortcut, then use it on the active application.
 
+## Updates
+
+Choose **Check for updates…** in the tray menu or Settings → About & help. Download the offered release, then choose **Restart and install**. Published prereleases are included. Checks run only on request; downloads are verified and the old app is backed up. Settings and profiles stay in place. Versions before 1.1.4 need one manual upgrade to get the updater.
+
 ## Default keys
 
 | Shortcut | Action |
@@ -47,7 +51,7 @@ Edit these in **Settings → Keyboard shortcuts**. Snap and location shortcuts s
 
 ## Status and boundaries
 
-This is an early independent implementation, not recovered PositionPro code or a compatibility clone. **57 local checks** passed, including Win32 positioning on two attached monitors, geometry, shortcut validation and settings persistence; a tray/event-loop smoke test passed. Evidence is in [tests/evidence](tests/evidence). Physical dock/undock, login startup, real editor gestures, and every third-party app/shortcut combination still require broader validation.
+This is an early independent implementation, not recovered PositionPro code or a compatibility clone. **89 local checks** passed, including Win32 positioning on two attached monitors, geometry, shortcut validation and settings persistence; a tray/event-loop smoke test passed. Evidence is in [tests/evidence](tests/evidence). Physical dock/undock, login startup, real editor gestures, and every third-party app/shortcut combination still require broader validation.
 
 - One saved window per **process name**; multiple windows of one app are not independently tracked in profiles.
 - Explorer, ApplicationFrameHost, utility/cloaked windows and normal windows smaller than 400×300 are excluded from automatic management.
@@ -73,6 +77,6 @@ Build with `pwsh ./scripts/build.ps1`. The [.NET 10 SDK](https://dotnet.microsof
 
 ## Data, license and contributions
 
-Settings, backups and optional errors remain beside the executable. No telemetry or app network calls. Never commit personal settings or logs. Read [PRIVACY](documentation/PRIVACY.md), [CONTRIBUTING](CONTRIBUTING.md), and [SECURITY](SECURITY.md).
+Settings, backups and optional errors remain beside the executable. No telemetry. Manual update checks and downloads contact GitHub. Never commit personal settings or logs. Read [PRIVACY](documentation/PRIVACY.md), [CONTRIBUTING](CONTRIBUTING.md), and [SECURITY](SECURITY.md).
 
 The repository’s original [MIT license](LICENSE) is preserved. The public PositionPro descriptions informed the initial feature specification; JetPane is independently implemented and unaffiliated.

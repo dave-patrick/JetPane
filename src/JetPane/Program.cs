@@ -181,6 +181,9 @@ static class Program
     [STAThread] static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && (args[0] == "--apply-update" || args[0] == "--apply-update-test")) { Environment.ExitCode = Updater.RunInstaller(args[1], args[0] == "--apply-update-test"); return; }
+        if (args.Length == 2 && args[0] == "--update-parent-probe") { UpdateIntegrationTests.ParentProbe(args[1]); return; }
+        if (args.Length == 2 && args[0] == "--updated-from") Updater.CleanupLater(args[1]);
         if (args.Length == 2 && (args[0] == "--hung-window-probe" || args[0] == "--window-probe"))
         { ResponsivenessTests.RunProbe(args[1], args[0] == "--hung-window-probe"); return; }
         if (args.Contains("--self-test")) { SelfTest.Run(); return; }
@@ -591,10 +594,11 @@ sealed partial class Pilot : Form
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Item("Settings…", Settings));
         menu.Items.Add(Item("Detailed help (offline)", Help));
+        menu.Items.Add(Item("Check for updates…", Updates));
         menu.Items.Add(Item("Open config folder", () => Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true })));
         menu.Items.Add(Item("Import settings…", Import)); menu.Items.Add(Item("Export settings…", Export));
         menu.Items.Add(Item("Open debug log", () => { string path = System.IO.Path.Combine(folder, "crash.log"); if (File.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); else Notify("No issues have been logged."); }));
-        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.3\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account, telemetry or network calls.\nOne saved position per application.\nFull source is available on GitHub.", "JetPane")));
+        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.4\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account or telemetry. Manual updates contact GitHub.\nOne saved position per application.\nFull source is available on GitHub.", "JetPane")));
         menu.Items.Add(Item("Exit", () => { exiting = true; Close(); }));
         tray.ContextMenuStrip = menu; old?.Dispose();
     }
@@ -689,9 +693,11 @@ sealed partial class Pilot : Form
         var clear = new Button { Text = "Remove selected", AutoSize = true }; clear.Click += (_, _) => { if (ml.SelectedIndex >= 0) { config.Monitors.Remove(config.Monitors.Keys.ElementAt(ml.SelectedIndex)); Persist(); RefreshMonitors(); RebuildMenu(); } };
         mb.Controls.AddRange(new Control[] { pc, assign, clear }); monitors.Controls.Add(ml); monitors.Controls.Add(new Label { Dock = DockStyle.Top, Height = 50, Text = $"Current monitor geometry ({Screen.AllScreens.Length} screens):\n{Signature()}" }); monitors.Controls.Add(mb); RefreshMonitors();
         var about = new TabPage("About & help"); tabs.TabPages.Add(about);
-        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.3 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency, telemetry or built-in updates. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
+        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.4 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency or telemetry. Update checks run only on request. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
         var helpButton = new Button { Text = "Open detailed offline help", Dock = DockStyle.Bottom, Height = 38 };
         helpButton.Click += (_, _) => Help(); about.Controls.Add(helpButton);
+        var updateButton = new Button { Text = "Check for updates…", Dock = DockStyle.Bottom, Height = 38 };
+        updateButton.Click += (_, _) => Updates(); about.Controls.Add(updateButton);
         ShortcutsTab(tabs);
         LocationsTab(tabs);
         if (initialTab != null) tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().FirstOrDefault(t => t.Text == initialTab);
@@ -771,6 +777,8 @@ static partial class SelfTest
         try
         {
             StateTests.Run(Check);
+            UpdateTests.Run(Check);
+            UpdateIntegrationTests.Run(Check);
             ResponsivenessTests.Run(Check);
             var area = new Rectangle(-1920, 0, 1919, 1079);
             for (int layout = 1; layout <= 4; layout++)

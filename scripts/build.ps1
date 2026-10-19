@@ -2,6 +2,8 @@ param([switch]$Verify)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $artifactRoot = Join-Path $repoRoot 'artifacts'
+$projectVersion = ([xml](Get-Content (Join-Path $repoRoot 'src/JetPane/JetPane.csproj') -Raw)).Project.PropertyGroup.Version
+if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$projectVersion") { throw 'Release tag must match the application version.' }
 # Fresh output prevents old executables, settings or reports from entering a new archive.
 $buildRoot = Join-Path $artifactRoot ('build-' + [guid]::NewGuid().ToString('N'))
 $publishRoot = Join-Path $buildRoot 'portable'

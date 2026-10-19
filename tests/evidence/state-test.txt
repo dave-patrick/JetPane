@@ -17,3 +17,30 @@ PASS: Conflicting numeric menu assignment is rejected without changing settings
 PASS: Explicit profile binding has no implicit numpad alias
 PASS: Legacy registration expands numeric and numpad bindings
 PASS: Custom registration uses the same exact binding rules as validation
+PASS: Updater compares versions numerically and ignores draft releases
+PASS: Updater downloads through the official release-asset API
+PASS: Updater discovers published prereleases
+PASS: Updater does not offer the installed version
+PASS: Updater does not offer downgrades
+PASS: Updater waits for complete release assets
+PASS: Updater ignores unsupported release tags
+PASS: Updater rejects download addresses outside its repository
+PASS: Updater reads release SHA256 manifests
+PASS: Updater rejects a missing package checksum
+PASS: Updater rejects ambiguous package checksums
+PASS: Updater handles empty release feeds asynchronously
+PASS: Updater reports failed HTTP checks without claiming success
+PASS: Updater cancellation stops a pending check
+PASS: Updater rejects a changed or corrupt download before extraction
+PASS: Updater rejects archive path traversal
+PASS: Updater never accepts settings from an update package
+PASS: Updater rejects case-insensitive duplicate archive entries
+PASS: Updater rejects incomplete portable archives
+PASS: Updater extracts only its four approved application files
+PASS: Updater rolls back partially replaced application files on failure
+PASS: Failed updates preserve settings byte for byte
+PASS: Updater installs all verified files successfully
+PASS: Successful updates preserve settings and unrelated user files
+PASS: Updater retains the old application and settings in a recovery backup
+PASS: Installer rechecks staged file hashes before changing the application
+PASS: Updater cleanup refuses unrelated directories

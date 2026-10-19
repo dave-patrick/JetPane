@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4 — 2026-10-19
+
+- Add manual GitHub update checks from the tray menu and Settings.
+- Download and verify updates without blocking the UI; support published prereleases.
+- Install through a separate helper after JetPane exits, preserve settings and unrelated files, and restart.
+- Keep recovery backups and roll back partial file replacements on failure.
+- Add updater unit tests and an isolated installer/restart integration test.
+
 ## 1.1.3 — 2026-10-19
 
 - Prevent stalled applications from blocking JetPane during startup restore, automatic placement, profile changes, snapping and clean switches.

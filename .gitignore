@@ -12,3 +12,8 @@ crash.log
 *.pdb
 .DS_Store
 Thumbs.db
+
+update.log
+.jetpane-backup-*/
+.jetpane-update.lock
+*.jetpane-new-*
