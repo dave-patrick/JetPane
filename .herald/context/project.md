@@ -11,3 +11,5 @@ Static GitHub Pages landing page lives in docs, with an illustrative browser-onl
 - Public landing pages use dark app-specific compositions with real approved brand assets; shared Atomic 22 navigation links to the blue Notes directory. Publish only docs/ via GitHub Pages. Never serve or publish private workspace data.
 
 - StateRules.cs centralizes snap exit, profile shortcut assignment, pending restore consumption and auto-save eligibility. StateTests.cs regression checks run with --state-test and are also included in --self-test. Both build and release workflows require build.ps1 -Verify, fresh evidence and bounded test processes. Smoke uses its own mutex, isolated settings and a dedicated test hotkey.
+
+- Native window mutations must remain nonblocking across application threads: ShowWindowAsync and SWP_ASYNCWINDOWPOS. Process inspection uses limited-access executable queries, deduplicated within each scan. ResponsivenessTests.cs uses only owned child probes, verifies stalled targets cannot block and queued moves preserve states. Never restore synchronous foreign-window calls.

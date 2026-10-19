@@ -6,7 +6,7 @@ Published by **Atomic 22 Industries**.
 
 <p align="center">A portable Windows tray utility for saved desktop arrangements, visual placement regions, and keyboard control across multiple monitors.</p>
 
-<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/tag/v1.1.2">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
+<p align="center"><a href="https://github.com/dave-patrick/JetPane/releases/tag/v1.1.3">Download</a> · <a href="https://dave-patrick.github.io/JetPane/">Website</a> · <a href="docs/help.html">Complete offline help</a> · <a href="documentation/GETTING-STARTED.md">Getting started</a></p>
 
 ## Run it
 
@@ -47,7 +47,7 @@ Edit these in **Settings → Keyboard shortcuts**. Snap and location shortcuts s
 
 ## Status and boundaries
 
-This is an early independent implementation, not recovered PositionPro code or a compatibility clone. **50 local checks** passed, including Win32 positioning on two attached monitors, geometry, shortcut validation and settings persistence; a tray/event-loop smoke test passed. Evidence is in [tests/evidence](tests/evidence). Physical dock/undock, login startup, real editor gestures, and every third-party app/shortcut combination still require broader validation.
+This is an early independent implementation, not recovered PositionPro code or a compatibility clone. **57 local checks** passed, including Win32 positioning on two attached monitors, geometry, shortcut validation and settings persistence; a tray/event-loop smoke test passed. Evidence is in [tests/evidence](tests/evidence). Physical dock/undock, login startup, real editor gestures, and every third-party app/shortcut combination still require broader validation.
 
 - One saved window per **process name**; multiple windows of one app are not independently tracked in profiles.
 - Explorer, ApplicationFrameHost, utility/cloaked windows and normal windows smaller than 400×300 are excluded from automatic management.

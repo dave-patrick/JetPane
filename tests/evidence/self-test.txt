@@ -17,6 +17,13 @@ PASS: Conflicting numeric menu assignment is rejected without changing settings
 PASS: Explicit profile binding has no implicit numpad alias
 PASS: Legacy registration expands numeric and numpad bindings
 PASS: Custom registration uses the same exact binding rules as validation
+PASS: Moving an unresponsive owned app does not block the UI thread
+PASS: Minimizing an unresponsive owned app does not block the UI thread
+PASS: Reordering an unresponsive owned app does not block the UI thread
+PASS: Scanning an unresponsive owned app avoids module inspection and retains executable identity (9 ms, found=True, path=86)
+PASS: Queued placement completes on a responsive owned external window
+PASS: Queued external placement preserves minimized state
+PASS: Queued external placement restores maximized state
 PASS: Layout 1 stays in work area
 PASS: Layout 1 covers odd pixel dimensions exactly
 PASS: Layout 1 has no overlapping slots

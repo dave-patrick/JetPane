@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
+using System.Text;
 
 namespace JetPane;
 
@@ -70,8 +72,40 @@ static class Native
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [DllImport("user32.dll")] public static extern bool GetWindowPlacement(nint hwnd, ref WINDOWPLACEMENT p);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(nint hwnd, out RECT r);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(nint hwnd, int command);
-    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags);
+    [DllImport("user32.dll", EntryPoint = "ShowWindow")] static extern bool ShowWindowCore(nint hwnd, int command);
+    [DllImport("user32.dll")] static extern bool ShowWindowAsync(nint hwnd, int command);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll", EntryPoint = "SetWindowPos", SetLastError = true)] static extern bool SetWindowPosCore(nint hwnd, nint after, int x, int y, int w, int h, uint flags);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern SafeProcessHandle OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder path, ref int size);
+
+    // Other applications must never be allowed to hold up the tray/UI thread.
+    public static bool ShowWindow(nint hwnd, int command) => GetWindowThreadProcessId(hwnd, out _) == GetCurrentThreadId()
+        ? ShowWindowCore(hwnd, command) : ShowWindowAsync(hwnd, command);
+    public static bool SetWindowPos(nint hwnd, nint after, int x, int y, int w, int h, uint flags)
+        => SetWindowPosCore(hwnd, after, x, y, w, h, flags | 0x4000); // SWP_ASYNCWINDOWPOS
+
+    static (string App, string Path) ProcessInfo(uint pid)
+    {
+        using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+        if (!handle.IsInvalid)
+        {
+            var path = new StringBuilder(512); int length = path.Capacity;
+            bool found = QueryFullProcessImageName(handle, 0, path, ref length);
+            if (!found && Marshal.GetLastWin32Error() == 122) // ERROR_INSUFFICIENT_BUFFER
+            {
+                path.EnsureCapacity(32768); length = path.Capacity;
+                found = QueryFullProcessImageName(handle, 0, path, ref length);
+            }
+            if (found)
+            {
+                string executable = path.ToString();
+                return (System.IO.Path.GetFileNameWithoutExtension(executable), executable);
+            }
+        }
+        using var process = Process.GetProcessById((int)pid);
+        return (process.ProcessName, "");
+    }
     [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern nint GetWindowLong(nint hwnd, int index);
@@ -84,6 +118,7 @@ static class Native
         var ignored = new HashSet<string>(excluded, StringComparer.OrdinalIgnoreCase);
         ignored.Add("explorer"); ignored.Add("ApplicationFrameHost");
         var result = new List<LiveWindow>();
+        var processes = new Dictionary<uint, (string App, string Path)>();
         EnumWindows((h, _) =>
         {
             try
@@ -92,8 +127,8 @@ static class Native
                 if (DwmGetWindowAttribute(h, 14, out int cloaked, sizeof(int)) == 0 && cloaked != 0) return true;
                 GetWindowThreadProcessId(h, out uint pid);
                 if (pid == Environment.ProcessId) return true;
-                using var process = Process.GetProcessById((int)pid);
-                string app = process.ProcessName;
+                if (!processes.TryGetValue(pid, out var info)) processes[pid] = info = ProcessInfo(pid);
+                string app = info.App;
                 if (ignored.Contains(app)) return true;
                 var wp = new WINDOWPLACEMENT { Length = Marshal.SizeOf<WINDOWPLACEMENT>() };
                 if (!GetWindowPlacement(h, ref wp)) return true;
@@ -106,8 +141,7 @@ static class Native
                 r.Left += dx; r.Right += dx; r.Top += dy; r.Bottom += dy;
                 if (!IsIconic(h) && !IsZoomed(h) && GetWindowRect(h, out var actual)) r = actual;
                 if (r.Right - r.Left < 400 || r.Bottom - r.Top < 300) return true;
-                string path = "";
-                try { path = process.MainModule?.FileName ?? ""; } catch { }
+                string path = info.Path;
                 result.Add(new(h, app, path, new Placement
                 {
                     App = app, Path = path, X = r.Left, Y = r.Top, Width = r.Right - r.Left,
@@ -147,6 +181,8 @@ static class Program
     [STAThread] static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && (args[0] == "--hung-window-probe" || args[0] == "--window-probe"))
+        { ResponsivenessTests.RunProbe(args[1], args[0] == "--hung-window-probe"); return; }
         if (args.Contains("--self-test")) { SelfTest.Run(); return; }
         if (args.Contains("--state-test")) { SelfTest.RunStateTests(); return; }
         bool smoke = args.Contains("--smoke-test");
@@ -558,7 +594,7 @@ sealed partial class Pilot : Form
         menu.Items.Add(Item("Open config folder", () => Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true })));
         menu.Items.Add(Item("Import settings…", Import)); menu.Items.Add(Item("Export settings…", Export));
         menu.Items.Add(Item("Open debug log", () => { string path = System.IO.Path.Combine(folder, "crash.log"); if (File.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); else Notify("No issues have been logged."); }));
-        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.2\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account, telemetry or network calls.\nOne saved position per application.\nFull source is available on GitHub.", "JetPane")));
+        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.3\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account, telemetry or network calls.\nOne saved position per application.\nFull source is available on GitHub.", "JetPane")));
         menu.Items.Add(Item("Exit", () => { exiting = true; Close(); }));
         tray.ContextMenuStrip = menu; old?.Dispose();
     }
@@ -653,7 +689,7 @@ sealed partial class Pilot : Form
         var clear = new Button { Text = "Remove selected", AutoSize = true }; clear.Click += (_, _) => { if (ml.SelectedIndex >= 0) { config.Monitors.Remove(config.Monitors.Keys.ElementAt(ml.SelectedIndex)); Persist(); RefreshMonitors(); RebuildMenu(); } };
         mb.Controls.AddRange(new Control[] { pc, assign, clear }); monitors.Controls.Add(ml); monitors.Controls.Add(new Label { Dock = DockStyle.Top, Height = 50, Text = $"Current monitor geometry ({Screen.AllScreens.Length} screens):\n{Signature()}" }); monitors.Controls.Add(mb); RefreshMonitors();
         var about = new TabPage("About & help"); tabs.TabPages.Add(about);
-        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.2 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency, telemetry or built-in updates. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
+        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.3 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency, telemetry or built-in updates. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
         var helpButton = new Button { Text = "Open detailed offline help", Dock = DockStyle.Bottom, Height = 38 };
         helpButton.Click += (_, _) => Help(); about.Controls.Add(helpButton);
         ShortcutsTab(tabs);
@@ -735,6 +771,7 @@ static partial class SelfTest
         try
         {
             StateTests.Run(Check);
+            ResponsivenessTests.Run(Check);
             var area = new Rectangle(-1920, 0, 1919, 1079);
             for (int layout = 1; layout <= 4; layout++)
             {

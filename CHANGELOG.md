@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3 — 2026-10-19
+
+- Prevent stalled applications from blocking JetPane during startup restore, automatic placement, profile changes, snapping and clean switches.
+- Queue cross-thread show/resize/reorder requests and keep same-thread verification deterministic.
+- Replace repeated process-module inspection with limited-access executable queries, reused per process within each scan.
+- Add owned stalled-window and responsive-window regressions, including minimized/maximized state.
+
 ## 1.1.2 — 2026-10-18
 
 - Fix settings restart failures from inactive snap locks and conflicting Default profile spelling.
