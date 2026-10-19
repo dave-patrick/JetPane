@@ -148,10 +148,17 @@ static class Program
     {
         ApplicationConfiguration.Initialize();
         if (args.Contains("--self-test")) { SelfTest.Run(); return; }
-        using var mutex = new Mutex(true, "Local\\WindowPilot.Portable", out bool first); // Shared with previous branding to prevent competing managers.
+        if (args.Contains("--state-test")) { SelfTest.RunStateTests(); return; }
+        bool smoke = args.Contains("--smoke-test");
+        using var mutex = new Mutex(true, smoke ? "Local\\JetPane.Smoke." + Environment.ProcessId : "Local\\WindowPilot.Portable", out bool first); // Shared with previous branding to prevent competing managers.
         if (!first) { MessageBox.Show("JetPane is already running. Look for its icon in the system tray."); return; }
-        try { Application.Run(new Pilot(args.Contains("--smoke-test"))); }
-        catch (Exception e) { MessageBox.Show(e.Message, "JetPane could not start"); }
+        try { Application.Run(new Pilot(smoke)); }
+        catch (Exception e)
+        {
+            Environment.ExitCode = 1;
+            if (smoke) File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "smoke-test.txt"), "FAIL: " + e);
+            else MessageBox.Show(e.Message, "JetPane could not start");
+        }
     }
 }
 
@@ -195,7 +202,16 @@ sealed partial class Pilot : Form
             {
                 Hide();
                 var finish = new System.Windows.Forms.Timer { Interval = 1200 };
-                finish.Tick += (_, _) => { finish.Stop(); finish.Dispose(); File.WriteAllText(System.IO.Path.Combine(folder, "smoke-test.txt"), "PASS: tray, menus, hotkey registration, event loop and clean shutdown"); exiting = true; Close(); };
+                finish.Tick += (_, _) =>
+                {
+                    finish.Stop(); finish.Dispose();
+                    bool valid = tray.Visible && tray.ContextMenuStrip != null && hotkeyActions.Count > 0 && hotkeyConflicts.Count == 0;
+                    Environment.ExitCode = valid ? 0 : 1;
+                    File.WriteAllText(System.IO.Path.Combine(folder, "smoke-test.txt"), valid
+                        ? "PASS: tray, menus, hotkey registration, event loop and clean shutdown"
+                        : "FAIL: tray/menu initialization or hotkey registration: " + string.Join(", ", hotkeyConflicts));
+                    exiting = true; Close();
+                };
                 finish.Start(); return;
             }
             Hide(); monitorSignature = Signature();
@@ -214,18 +230,21 @@ sealed partial class Pilot : Form
         var c = JsonSerializer.Deserialize<Config>(File.ReadAllText(path)) ?? throw new InvalidDataException("Empty settings file.");
         if (c.Version != 1 || c.Profiles == null || c.Profiles.Count == 0 || c.Profiles.Any(p => string.IsNullOrWhiteSpace(p.Name) || p.Windows == null) || c.Profiles.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != c.Profiles.Count)
             throw new InvalidDataException("Unsupported or invalid JetPane settings.");
+        if (c.Profiles.Any(p => p.Name != "Default" && p.Name.Equals("Default", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("The reserved profile name must be spelled Default.");
         if (!c.Profiles.Any(p => p.Name == "Default")) c.Profiles.Insert(0, new());
         if (!c.Profiles.Any(p => p.Name == c.Active)) c.Active = "Default";
         if (!c.Profiles.Any(p => p.Name == c.StartupProfile)) c.StartupProfile = "Default";
         if (c.Excluded == null || c.SnapExcluded == null || c.Monitors == null || c.Locks == null || c.SlotMemory == null || c.Snap < 0 || c.Snap > 4)
             throw new InvalidDataException("Invalid settings collections or snap layout.");
+        if (c.Snap == 0) c.Locks.Clear();
         if (c.StartupMode is not ("None" or "Profile" or "Snap") || c.Profiles.Any(p => p.Shortcut < 0 || p.Shortcut > 9)
             || c.Profiles.Where(p => p.Shortcut > 0).GroupBy(p => p.Shortcut).Any(g => g.Count() > 1)
             || c.Locks.Any(kv => kv.Key < 0 || kv.Key >= (c.Snap == 3 ? 3 : c.Snap == 4 ? 4 : 2) || string.IsNullOrWhiteSpace(kv.Value))
             || c.Monitors.Any(kv => !c.Profiles.Any(p => p.Name == kv.Value))) throw new InvalidDataException("Invalid startup, shortcut, monitor or slot assignments.");
         if (c.Locations == null || c.Locations.Any(l => string.IsNullOrWhiteSpace(l.Id) || string.IsNullOrWhiteSpace(l.Name) || l.Position == null || l.Position.Width <= 0 || l.Position.Height <= 0 || l.Displays == null) || c.Locations.Select(l => l.Id).Distinct().Count() != c.Locations.Count) throw new InvalidDataException("Invalid location data.");
         if (c.Shortcuts == null || c.Profiles.Any(p => p.Displays == null || p.Displays.Any(d => d.Width <= 0 || d.Height <= 0))) throw new InvalidDataException("Invalid shortcut or monitor data.");
-        ShortcutKeys.Validate(ShortcutKeys.Actions(c).Select(a => (a.Id, ShortcutKeys.Binding(c, a.Id, a.Default))));
+        ShortcutKeys.Validate(ShortcutKeys.Actions(c).Select(a => (a.Id, ShortcutKeys.Binding(c, a.Id, a.Default))), c);
         if (c.Profiles.Any(p => p.Windows.Any(w => string.IsNullOrWhiteSpace(w.App) || w.Width < 1 || w.Height < 1))) throw new InvalidDataException("Invalid saved window.");
         c.Excluded = c.Excluded.Concat(new[] { "explorer", "ApplicationFrameHost" }).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         c.SlotMemory = new(c.SlotMemory, StringComparer.OrdinalIgnoreCase);
@@ -281,7 +300,7 @@ sealed partial class Pilot : Form
     void Switch(string name, bool manual = true)
     {
         if (!config.Profiles.Any(p => p.Name == name)) return;
-        config.Active = name; config.Snap = 0; slots.Clear(); pending.Clear(); launches.Clear();
+        config.Active = name; StateRules.LeaveSnap(config); slots.Clear(); pending.Clear(); launches.Clear();
         if (manual && config.CleanSwitch)
         {
             var otherApps = config.Profiles.Where(p => p.Name != name).SelectMany(p => p.Windows).Select(p => p.App).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -307,7 +326,7 @@ sealed partial class Pilot : Form
             if (config.AutoSave && config.Snap == 0 && quietTicks == 0)
             {
                 bool changed = false;
-                foreach (var old in previous.Values.Where(w => !now.ContainsKey(w.Handle)))
+                foreach (var old in StateRules.ClosedWindows(config, previous.Values, now.Keys.ToHashSet()))
                 {
                     Current.Windows.RemoveAll(p => p.App.Equals(old.App, StringComparison.OrdinalIgnoreCase));
                     Current.Windows.Add(old.Position); changed = true;
@@ -329,8 +348,7 @@ sealed partial class Pilot : Form
             foreach (var item in pending.ToList())
             {
                 if (!now.TryGetValue(item.Key, out var w)) { pending.Remove(item.Key); continue; }
-                if (DateTime.UtcNow < item.Value) continue;
-                pending.Remove(item.Key);
+                if (!StateRules.TakePending(pending, item.Key, DateTime.UtcNow, (config.Snap == 0 || config.DisableSnapping) && config.AutoRestore && quietTicks > 0)) continue;
                 if (config.Snap != 0 && !config.DisableSnapping) SnapWindow(w);
                 else if (config.AutoRestore && quietTicks == 0)
                 {
@@ -402,11 +420,12 @@ sealed partial class Pilot : Form
     {
         var a = Areas(); var keys = slots.Keys.Where(i => !config.Locks.ContainsKey(i)).Order().ToArray();
         var handles = keys.Select(i => slots[i]).Reverse().ToArray();
+        var windows = Windows().ToDictionary(w => w.Handle);
         for (int i = 0; i < keys.Length; i++)
         {
             slots[keys[i]] = handles[i]; var r = a[keys[i]];
             Native.Move(handles[i], new Placement { X = r.X, Y = r.Y, Width = r.Width, Height = r.Height }, false);
-            var w = Windows().FirstOrDefault(w => w.Handle == handles[i]); if (w != null) config.SlotMemory[w.App] = keys[i];
+            if (windows.TryGetValue(handles[i], out var w)) config.SlotMemory[w.App] = keys[i];
         }
         Persist();
     }
@@ -421,14 +440,10 @@ sealed partial class Pilot : Form
             string binding = ShortcutKeys.Binding(config, action.Id, action.Default);
             try
             {
-                var parsed = ShortcutKeys.Parse(binding); if (parsed.Key == 0) continue;
-                int id = nextId++; hotkeyActions[id] = action.Id;
-                if (!Native.RegisterHotKey(Handle, id, parsed.Modifiers | 0x4000, parsed.Key)) hotkeyConflicts.Add(action.Label + ": " + binding);
-                // Legacy numbered profile defaults also accept numpad; custom bindings are exact.
-                if (action.Id.StartsWith("profile:") && !config.Shortcuts.ContainsKey(action.Id) && parsed.Key >= (uint)Keys.D1 && parsed.Key <= (uint)Keys.D9)
+                foreach (var parsed in ShortcutKeys.EffectiveBindings(config, action.Id, binding))
                 {
-                    id = nextId++; hotkeyActions[id] = action.Id;
-                    if (!Native.RegisterHotKey(Handle, id, parsed.Modifiers | 0x4000, (uint)Keys.NumPad0 + parsed.Key - (uint)Keys.D0)) hotkeyConflicts.Add(action.Label + ": numpad");
+                    int id = nextId++; hotkeyActions[id] = action.Id;
+                    if (!Native.RegisterHotKey(Handle, id, parsed.Modifiers | 0x4000, parsed.Key)) hotkeyConflicts.Add(action.Label + ": " + binding);
                 }
             }
             catch (ArgumentException e) { hotkeyConflicts.Add(action.Label + ": " + e.Message); }
@@ -482,7 +497,7 @@ sealed partial class Pilot : Form
         {
             string? name = Ask("New profile name"); if (string.IsNullOrWhiteSpace(name)) return;
             if (config.Profiles.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("That name already exists.");
-            config.Profiles.Add(new Profile { Name = name }); config.Active = name; config.Snap = 0; slots.Clear(); SaveLayout();
+            config.Profiles.Add(new Profile { Name = name }); config.Active = name; StateRules.LeaveSnap(config); slots.Clear(); SaveLayout();
         }));
         profiles.DropDownItems.Add(Item("Rename current profile…", () =>
         {
@@ -505,7 +520,7 @@ sealed partial class Pilot : Form
             Switch("Default"); Hotkeys();
         }));
         var shortcuts = new ToolStripMenuItem("Assign shortcut to current profile"); profiles.DropDownItems.Add(shortcuts);
-        for (int n = 0; n <= 9; n++) { int number = n; shortcuts.DropDownItems.Add(Item(n == 0 ? "None" : $"Ctrl+Alt+{n}", () => { foreach (var p in config.Profiles.Where(p => p.Shortcut == number)) { p.Shortcut = 0; config.Shortcuts.Remove("profile:" + p.Name); } Current.Shortcut = number; config.Shortcuts.Remove("profile:" + Current.Name); Persist(); Hotkeys(); RebuildMenu(); }, Current.Shortcut == n)); }
+        for (int n = 0; n <= 9; n++) { int number = n; shortcuts.DropDownItems.Add(Item(n == 0 ? "None" : $"Ctrl+Alt+{n}", () => { StateRules.AssignProfileShortcut(config, Current, number); Persist(); Hotkeys(); RebuildMenu(); }, Current.Shortcut == n)); }
         profiles.DropDownItems.Add(Item("Assign current profile to these monitors", () => { config.Monitors[Signature()] = Current.Name; Persist(); RebuildMenu(); }));
         profiles.DropDownItems.Add(Item("Clear assignment for these monitors", () => { config.Monitors.Remove(Signature()); Persist(); RebuildMenu(); }));
         var startup = new ToolStripMenuItem("Startup profile"); profiles.DropDownItems.Add(startup);
@@ -543,7 +558,7 @@ sealed partial class Pilot : Form
         menu.Items.Add(Item("Open config folder", () => Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true })));
         menu.Items.Add(Item("Import settings…", Import)); menu.Items.Add(Item("Export settings…", Export));
         menu.Items.Add(Item("Open debug log", () => { string path = System.IO.Path.Combine(folder, "crash.log"); if (File.Exists(path)) Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); else Notify("No issues have been logged."); }));
-        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.1\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account, telemetry or network calls.\nOne saved position per application.\nFull source is included in the download.", "JetPane")));
+        menu.Items.Add(Item("About", () => MessageBox.Show("JetPane 1.1.2\nPublished by Atomic 22 Industries\nPortable Windows window manager.\nSettings are stored beside the executable.\nNo subscription, account, telemetry or network calls.\nOne saved position per application.\nFull source is available on GitHub.", "JetPane")));
         menu.Items.Add(Item("Exit", () => { exiting = true; Close(); }));
         tray.ContextMenuStrip = menu; old?.Dispose();
     }
@@ -638,7 +653,7 @@ sealed partial class Pilot : Form
         var clear = new Button { Text = "Remove selected", AutoSize = true }; clear.Click += (_, _) => { if (ml.SelectedIndex >= 0) { config.Monitors.Remove(config.Monitors.Keys.ElementAt(ml.SelectedIndex)); Persist(); RefreshMonitors(); RebuildMenu(); } };
         mb.Controls.AddRange(new Control[] { pc, assign, clear }); monitors.Controls.Add(ml); monitors.Controls.Add(new Label { Dock = DockStyle.Top, Height = 50, Text = $"Current monitor geometry ({Screen.AllScreens.Length} screens):\n{Signature()}" }); monitors.Controls.Add(mb); RefreshMonitors();
         var about = new TabPage("About & help"); tabs.TabPages.Add(about);
-        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.1 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency, telemetry or built-in updates. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
+        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.2 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency, telemetry or built-in updates. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
         var helpButton = new Button { Text = "Open detailed offline help", Dock = DockStyle.Bottom, Height = 38 };
         helpButton.Click += (_, _) => Help(); about.Controls.Add(helpButton);
         ShortcutsTab(tabs);
@@ -710,7 +725,7 @@ sealed class DarkColors : ProfessionalColorTable
     public override Color MenuItemBorder => Color.FromArgb(100, 110, 130);
 }
 
-static class SelfTest
+static partial class SelfTest
 {
     public static void Run()
     {
@@ -719,6 +734,7 @@ static class SelfTest
         void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); results.Add("PASS: " + name); }
         try
         {
+            StateTests.Run(Check);
             var area = new Rectangle(-1920, 0, 1919, 1079);
             for (int layout = 1; layout <= 4; layout++)
             {

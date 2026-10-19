@@ -9,3 +9,5 @@ Static GitHub Pages landing page lives in docs, with an illustrative browser-onl
 - The app publisher is Atomic 22 Industries. Keep publisher.json, package metadata and first-party app/site credits consistent; preserve existing licence and third-party attribution.
 
 - Public landing pages use dark app-specific compositions with real approved brand assets; shared Atomic 22 navigation links to the blue Notes directory. Publish only docs/ via GitHub Pages. Never serve or publish private workspace data.
+
+- StateRules.cs centralizes snap exit, profile shortcut assignment, pending restore consumption and auto-save eligibility. StateTests.cs regression checks run with --state-test and are also included in --self-test. Both build and release workflows require build.ps1 -Verify, fresh evidence and bounded test processes. Smoke uses its own mutex, isolated settings and a dedicated test hotkey.

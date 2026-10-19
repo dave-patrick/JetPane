@@ -1,3 +1,22 @@
+PASS: Leaving quadrants clears locks and survives reload
+PASS: Leaving thirds survives reload
+PASS: Legacy inactive snap locks recover without losing profiles
+PASS: Active layout still rejects out-of-range locks
+PASS: Reserved Default spelling rejected before import can persist duplicates
+PASS: Inserted Default remains valid across repeated reloads
+PASS: None preserves unrelated custom profile bindings
+PASS: None clears only the selected custom profile binding
+PASS: Numeric reassignment releases only its conflicting profile
+PASS: Quiet period retains a due restore
+PASS: Deferred restore runs after quiet period
+PASS: Completed restore cannot run twice
+PASS: Settling delay retains future restore
+PASS: Auto-save ignores excluded windows and still saves genuinely closed apps
+PASS: Implicit profile numpad collision rejected during settings validation
+PASS: Conflicting numeric menu assignment is rejected without changing settings
+PASS: Explicit profile binding has no implicit numpad alias
+PASS: Legacy registration expands numeric and numpad bindings
+PASS: Custom registration uses the same exact binding rules as validation
 PASS: Layout 1 stays in work area
 PASS: Layout 1 covers odd pixel dimensions exactly
 PASS: Layout 1 has no overlapping slots

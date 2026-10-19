@@ -14,7 +14,7 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build portable archive
         shell: pwsh
-        run: ./scripts/build.ps1
+        run: ./scripts/build.ps1 -Verify
       - name: Publish versioned prerelease
         shell: pwsh
         env:

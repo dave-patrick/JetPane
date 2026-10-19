@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2 — 2026-10-18
+
+- Fix settings restart failures from inactive snap locks and conflicting Default profile spelling.
+- Preserve unrelated custom shortcuts, defer restores through quiet periods, and keep excluded apps out of auto-save.
+- Validate implicit numpad aliases and numeric profile assignments before saving.
+- Reuse one window snapshot when swapping panes.
+- Add 19 deterministic regressions; require fresh, bounded build/release verification and actual smoke hotkey registration.
+
 ## 1.1.1
 
 - Publisher metadata, About/help credits and repository/site records now identify Atomic 22 Industries.

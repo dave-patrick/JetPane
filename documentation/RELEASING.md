@@ -10,6 +10,6 @@
 gh release create v1.1.0 artifacts/JetPane-portable.zip artifacts/SHA256SUMS.txt --prerelease --title 'JetPane 1.1.0' --notes-file documentation/RELEASE-NOTES-1.1.0.md
 ```
 
-The tag-push release workflow builds and publishes portable prerelease assets for future `v*` tags. Builds from ordinary source pushes are retained as workflow artifacts. Review the release notes and update the website's versioned link when promoting a new version.
+The tag-push release workflow builds with -Verify and publishes portable prerelease assets for future `v*` tags. Builds from ordinary source pushes are retained as workflow artifacts. Review the release notes and update the website's versioned link when promoting a new version.
 
 The Pages workflow needs GitHub Pages configured for GitHub Actions. The website uses a versioned initial download URL so prerelease status does not break download links; GitHub's `releases/latest` endpoint excludes prereleases.

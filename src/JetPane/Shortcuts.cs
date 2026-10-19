@@ -36,13 +36,22 @@ static class ShortcutKeys
         return actions;
     }
     public static string Binding(Config c, string id, string fallback) => c.Shortcuts.TryGetValue(id, out string? custom) ? custom : fallback;
-    public static Dictionary<string, string> Validate(IEnumerable<(string Id, string Value)> values)
+    public static IEnumerable<(uint Modifiers, uint Key)> EffectiveBindings(Config? config, string id, string value)
+    {
+        var parsed = Parse(value);
+        if (parsed.Key == 0) yield break;
+        yield return parsed;
+        if (config != null && id.StartsWith("profile:") && !config.Shortcuts.ContainsKey(id)
+            && parsed.Key >= (uint)Keys.D1 && parsed.Key <= (uint)Keys.D9)
+            yield return (parsed.Modifiers, (uint)Keys.NumPad0 + parsed.Key - (uint)Keys.D0);
+    }
+    public static Dictionary<string, string> Validate(IEnumerable<(string Id, string Value)> values, Config? config = null)
     {
         var result = new Dictionary<string, string>(); var used = new HashSet<(uint, uint)>();
         foreach (var (id, value) in values)
         {
-            var parsed = Parse(value);
-            if (parsed.Key != 0 && !used.Add(parsed)) throw new ArgumentException("Two actions use the same shortcut: " + value);
+            foreach (var parsed in EffectiveBindings(config, id, value))
+                if (!used.Add(parsed)) throw new ArgumentException("Two actions use the same shortcut (including numpad aliases): " + value);
             result[id] = value.Trim();
         }
         return result;
