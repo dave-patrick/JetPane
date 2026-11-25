@@ -67,5 +67,31 @@ static class StateTests
         check(Reload(c).Shortcuts.Count == 2, "Explicit profile binding has no implicit numpad alias");
         check(ShortcutKeys.EffectiveBindings(new Config(), "profile:Default", "Ctrl+Alt+1").Count() == 2, "Legacy registration expands numeric and numpad bindings");
         check(ShortcutKeys.EffectiveBindings(c, "profile:Default", "Ctrl+Alt+1").Count() == 1, "Custom registration uses the same exact binding rules as validation");
+        var order = new Config();
+        var windows = order.Profiles[0].Windows;
+        windows.AddRange(new[]
+        {
+            new Placement { App = "Browser", Order = 0 }, new Placement { App = "Notes", Order = 1 },
+            new Placement { App = "Editor", Order = 2 }, new Placement { App = "Terminal", Order = 3 }
+        });
+        Pilot.ReorderPlacements(order.Profiles[0].Windows, 0, 2);
+        check(order.Profiles[0].Windows.Select(p => p.App).SequenceEqual(new[] { "Notes", "Editor", "Browser", "Terminal"})
+            && order.Profiles[0].Windows.Select(p => p.Order).SequenceEqual(new[] { 0, 1, 2, 3 }), "Dragging a program reorders the arrangement and renumbers stack order");
+        Pilot.ReorderPlacements(order.Profiles[0].Windows, 2, 0);
+        check(order.Profiles[0].Windows.Select(p => p.App).SequenceEqual(new[] { "Browser", "Notes", "Editor", "Terminal" }), "Moving a program to the front restores its stack position");
+        Pilot.ReorderPlacements(order.Profiles[0].Windows, 1, 1);
+        check(order.Profiles[0].Windows.Select(p => p.App).SequenceEqual(new[] { "Browser", "Notes", "Editor", "Terminal" }), "Dragging onto itself is a no-op");
+        Pilot.ReorderPlacements(order.Profiles[0].Windows, 0, 99);
+        check(order.Profiles[0].Windows.Select(p => p.App).SequenceEqual(new[] { "Notes", "Editor", "Terminal", "Browser" }), "A drop past the end clamps to the last position");
+        Pilot.ReorderPlacements(order.Profiles[0].Windows, 5, 1);
+        check(order.Profiles[0].Windows.Count == 4, "An out-of-range source index leaves the arrangement untouched");
+        var minimize = new Config();
+        var hidden = new Placement { App = "Hidden", Minimized = true, Order = 0 };
+        check(!minimize.SaveMinimized, "Minimized windows are not remembered by default");
+        check(!Pilot.RestoreMinimized(minimize, true, hidden), "Disabled preference ignores saved minimized state on profile load");
+        minimize.SaveMinimized = true;
+        check(Pilot.RestoreMinimized(minimize, true, hidden), "Enabled preference restores saved minimized state on profile load");
+        check(!Pilot.RestoreMinimized(minimize, false, hidden), "Manual restore never forces the minimized state");
+        check(Reload(minimize).SaveMinimized, "Minimized preference survives reload");
     }
 }

@@ -34,6 +34,42 @@ class ArrangementCanvas : Control
         DoubleBuffered = true; BackColor = Color.FromArgb(239, 243, 248);
         AccessibleName = "Arrangement diagram"; AccessibleDescription = "Monitor geometry and labeled window positions. The application list below provides the same information as text.";
     }
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)] public bool Editable { get => editable; set { editable = value; if (!editable) { dragging = false; Capture = false; Cursor = Cursors.Default; } } }
+    public Action<int, Rectangle>? PositionChanged;
+    bool editable; int dragIndex = -1; Point dragStart; Rectangle dragInitial; bool dragging;
+    static Rectangle MoveRect(Rectangle initial, Point start, Point point)
+        => new(initial.X + (point.X - start.X), initial.Y + (point.Y - start.Y), initial.Width, initial.Height);
+    int IndexAt(Point client)
+    {
+        int best = -1; int bestOrder = -1;
+        for (int i = 0; i < Windows.Count; i++)
+        {
+            var p = Windows[i];
+            if (p.Minimized || p.Maximized) continue;
+            var r = MapRectangle(new Rectangle(p.X, p.Y, p.Width, p.Height));
+            r.Inflate(5, 5);
+            if (r.Contains(client) && p.Order > bestOrder) { best = i; bestOrder = p.Order; }
+        }
+        return best;
+    }
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e); if (!Editable || e.Button != MouseButtons.Left) return;
+        dragIndex = IndexAt(e.Location); if (dragIndex < 0) return;
+        dragStart = e.Location; var p = Windows[dragIndex]; dragInitial = new Rectangle(p.X, p.Y, p.Width, p.Height);
+        dragging = true; Capture = true; Cursor = Cursors.SizeAll;
+    }
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e); if (!dragging) return;
+        var next = MoveRect(dragInitial, dragStart, e.Location); var p = Windows[dragIndex];
+        p.X = next.X; p.Y = next.Y; PositionChanged?.Invoke(dragIndex, next); Invalidate();
+    }
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e); if (!dragging) return;
+        dragging = false; Capture = false; Cursor = Cursors.Default;
+    }
     static Color AppColor(string name)
     {
         Color[] palette = { Color.FromArgb(29, 79, 132), Color.FromArgb(30, 107, 95), Color.FromArgb(112, 63, 124), Color.FromArgb(140, 78, 28), Color.FromArgb(117, 57, 78) };
@@ -141,11 +177,14 @@ sealed class ArrangementPreview : Form
         var apply = new Button { Text = "Apply arrangement", AutoSize = true, Height = 32 };
         var helpButton = new Button { Text = "Help", AutoSize = true, Height = 32 }; helpButton.Click += (_, _) => help();
         var close = new Button { Text = "Close", AutoSize = true, Height = 32 }; close.Click += (_, _) => Close();
-        footer.Controls.AddRange(new Control[] { monitorLabel, monitors, apply, helpButton, close });
+        var dirtyLabel = new Label { Text = "Layout edited — click Apply to move windows and save.", AutoSize = true, Visible = false, ForeColor = Color.FromArgb(140, 78, 28), Margin = new Padding(12, 6, 0, 0) };
+        footer.Controls.AddRange(new Control[] { monitorLabel, monitors, apply, helpButton, close, dirtyLabel });
+        canvas.PositionChanged = (_, _) => { dirtyLabel.Visible = true; };
         void RefreshPreview()
         {
             int selected = choices.SelectedIndex; if (selected < 0) return;
             bool profile = selected < config.Profiles.Count; monitorLabel.Visible = monitors.Visible = !profile;
+            canvas.Editable = profile; dirtyLabel.Visible = false;
             if (profile)
             {
                 var p = config.Profiles[selected]; bool legacy = p.Displays.Count == 0;

@@ -18,11 +18,11 @@ Right-click the tray icon for controls. Double-click it for Settings. Start with
 
 | Mode | What it does | Use it for |
 | --- | --- | --- |
-| Profiles | Save positions, sizes, states and stacking order across monitors; load a profile and launch missing apps | Workspaces, docking, different tasks |
+| Profiles | Save positions, sizes, maximized state and stacking order across monitors; load a profile and launch missing apps | Workspaces, docking, different tasks |
 | Snap layouts | Divide one monitor into halves, thirds or quadrants, with slot locks and automatic filling | Tiling apps while you work |
 | Locations | Draw a named rectangle and assign a shortcut to move the active app there | Keyboard placement of individual windows |
 
-Other controls include monitor assignments, custom hotkeys, automatic restore/save, separate exclusions, import/export, and an optional clean-desktop profile switch. The [full guide](docs/help.html) covers every option.
+Profiles can be edited by dragging: reorder programs in Settings → Saved positions to set stacking order, or drag windows on the arrangement preview to reposition them, then Apply to move windows and save the layout. Minimized state is not saved or restored by default; enable **Remember minimized windows in profiles** in the tray menu to keep it. Other controls include monitor assignments, custom hotkeys, automatic restore/save, separate exclusions, import/export, and an optional clean-desktop profile switch. The [full guide](docs/help.html) covers every option.
 
 ## See the arrangements
 

@@ -44,6 +44,7 @@ public class Config
     public Dictionary<string, string> Monitors { get; set; } = new();
     public bool AutoSave { get; set; }
     public bool AutoRestore { get; set; } = true;
+    public bool SaveMinimized { get; set; }
     public bool DisableHotkeys { get; set; }
     public bool CleanSwitch { get; set; }
     public bool Dark { get; set; } = true;
@@ -308,7 +309,18 @@ sealed partial class Pilot : Form
     {
         Current.Displays = DisplayGeometry.Capture();
         Current.Windows = Windows().GroupBy(w => w.App, StringComparer.OrdinalIgnoreCase).Select(g => g.First().Position).ToList();
+        if (!config.SaveMinimized) foreach (var p in Current.Windows) p.Minimized = false;
         Persist(); RebuildMenu(); Notify($"Saved {Current.Windows.Count} applications to {Current.Name}.");
+    }
+    public static bool RestoreMinimized(Config config, bool keepMinimized, Placement placement)
+        => keepMinimized && config.SaveMinimized && placement.Minimized;
+    public static void ReorderPlacements(List<Placement> windows, int fromIndex, int toIndex)
+    {
+        if (windows == null || fromIndex < 0 || fromIndex >= windows.Count) return;
+        var item = windows[fromIndex];
+        windows.RemoveAt(fromIndex);
+        windows.Insert(Math.Clamp(toIndex, 0, windows.Count), item);
+        for (int i = 0; i < windows.Count; i++) windows[i].Order = i;
     }
     void Restore(bool launch, bool keepMinimized)
     {
@@ -317,13 +329,14 @@ sealed partial class Pilot : Form
         var windows = Windows();
         foreach (var p in Current.Windows.OrderByDescending(p => p.Order))
         {
+            bool restoreMinimized = RestoreMinimized(config, keepMinimized, p);
             var w = windows.FirstOrDefault(w => w.App.Equals(p.App, StringComparison.OrdinalIgnoreCase));
             if (w != null)
             {
-                if (!Native.Move(w.Handle, p, keepMinimized)) Notify($"Could not move {p.App}. It may be running as administrator.");
-                if (!p.Minimized || !keepMinimized) Native.SetWindowPos(w.Handle, 0, 0, 0, 0, 0, 0x13); // reorder without focus
+                if (!Native.Move(w.Handle, p, restoreMinimized)) Notify($"Could not move {p.App}. It may be running as administrator.");
+                if (!restoreMinimized) Native.SetWindowPos(w.Handle, 0, 0, 0, 0, 0, 0x13); // reorder without focus
             }
-            else if (launch && !p.Minimized && !string.IsNullOrEmpty(p.Path))
+            else if (launch && !restoreMinimized && !string.IsNullOrEmpty(p.Path))
             {
                 try
                 {
@@ -368,6 +381,7 @@ sealed partial class Pilot : Form
                 foreach (var old in StateRules.ClosedWindows(config, previous.Values, now.Keys.ToHashSet()))
                 {
                     Current.Windows.RemoveAll(p => p.App.Equals(old.App, StringComparison.OrdinalIgnoreCase));
+                    if (!config.SaveMinimized) old.Position.Minimized = false;
                     Current.Windows.Add(old.Position); changed = true;
                 }
                 if (changed) Persist();
@@ -375,7 +389,7 @@ sealed partial class Pilot : Form
             foreach (var entry in launches.ToList())
             {
                 var w = live.FirstOrDefault(w => w.App.Equals(entry.Key, StringComparison.OrdinalIgnoreCase));
-                if (w != null) { Native.Move(w.Handle, entry.Value.Position, true); launches.Remove(entry.Key); }
+                if (w != null) { Native.Move(w.Handle, entry.Value.Position, config.SaveMinimized); launches.Remove(entry.Key); }
                 else if (DateTime.UtcNow > entry.Value.Deadline) { launches.Remove(entry.Key); Notify($"No manageable window appeared for {entry.Key} within 30 seconds."); }
             }
             foreach (var w in live)
@@ -588,6 +602,7 @@ sealed partial class Pilot : Form
         menu.Items.Add(Item("Start with Windows (snap layout)", () => SetStartup(config.StartupMode == "Snap" ? "None" : "Snap"), config.StartupMode == "Snap"));
         Toggle("Auto save to profile", () => config.AutoSave, b => config.AutoSave = b, menu.Items);
         Toggle("Auto restore new windows", () => config.AutoRestore, b => config.AutoRestore = b, menu.Items);
+        Toggle("Remember minimized windows in profiles", () => config.SaveMinimized, b => config.SaveMinimized = b, menu.Items);
         Toggle("Disable global hotkeys", () => config.DisableHotkeys, b => { config.DisableHotkeys = b; Hotkeys(); }, menu.Items);
         Toggle("Clean desktop on manual profile switch", () => config.CleanSwitch, b => config.CleanSwitch = b, menu.Items);
         menu.Items.Add(Item(config.Dark ? "Switch to light tray menu" : "Switch to dark tray menu", () => { config.Dark = !config.Dark; Persist(); RebuildMenu(); }));
@@ -648,16 +663,31 @@ sealed partial class Pilot : Form
         var positions = new TabPage("Saved positions"); tabs.TabPages.Add(positions);
         var combo = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList };
         combo.Items.AddRange(config.Profiles.Select(p => p.Name).Cast<object>().ToArray()); combo.SelectedItem = config.Active;
-        var list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true };
+        var list = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, AllowDrop = true };
         foreach (var col in new[] { "Order", "Application", "Position", "Size", "State", "Last seen (local)" }) list.Columns.Add(col, col == "Application" || col.StartsWith("Last") ? 180 : 95);
+        list.ItemDrag += (s, e) => { if (e.Item is ListViewItem item) list.DoDragDrop(item, DragDropEffects.Move); };
+        list.DragOver += (s, e) => { e.Effect = DragDropEffects.Move; };
+        list.DragDrop += (s, e) =>
+        {
+            if (e.Data!.GetData(typeof(ListViewItem)) is not ListViewItem source) return;
+            var target = list.HitTest(list.PointToClient(new Point(e.X, e.Y))).Item;
+            if (target is null || ReferenceEquals(source, target)) return;
+            var profile = config.Profiles.First(p => p.Name == (string)combo.SelectedItem!);
+            Pilot.ReorderPlacements(profile.Windows, source.Index, target.Index);
+            Persist(); RefreshPositions();
+        };
         void RefreshPositions()
         {
             list.Items.Clear(); var profile = config.Profiles.First(p => p.Name == (string)combo.SelectedItem!);
             foreach (var p in profile.Windows.OrderBy(p => p.Order)) list.Items.Add(new ListViewItem(new[] { (p.Order + 1).ToString(), p.App, $"{p.X}, {p.Y}", $"{p.Width}×{p.Height}", p.Minimized ? "Minimized" : p.Maximized ? "Maximized" : "Normal", p.LastSeen.ToLocalTime().ToString("g") }) { Tag = p });
         }
-        var remove = new Button { Text = "Remove selected from profile", Dock = DockStyle.Bottom, Height = 34 };
+        var bottom = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 72, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var rememberMinimized = new CheckBox { Text = "Remember minimized windows in profiles", AutoSize = true, Checked = config.SaveMinimized };
+        rememberMinimized.CheckedChanged += (_, _) => { config.SaveMinimized = rememberMinimized.Checked; Persist(); RebuildMenu(); };
+        var remove = new Button { Text = "Remove selected from profile", AutoSize = true };
         remove.Click += (_, _) => { var p = config.Profiles.First(p => p.Name == (string)combo.SelectedItem!); foreach (ListViewItem item in list.SelectedItems) p.Windows.Remove((Placement)item.Tag!); Persist(); RefreshPositions(); };
-        combo.SelectedIndexChanged += (_, _) => RefreshPositions(); positions.Controls.Add(list); positions.Controls.Add(combo); positions.Controls.Add(remove); RefreshPositions();
+        bottom.Controls.Add(rememberMinimized); bottom.Controls.Add(remove);
+        combo.SelectedIndexChanged += (_, _) => RefreshPositions(); positions.Controls.Add(list); positions.Controls.Add(combo); positions.Controls.Add(bottom); RefreshPositions();
         void ExclusionTab(string title, List<string> apps, bool global)
         {
             var tab = new TabPage(title); tabs.TabPages.Add(tab); var lb = new ListBox { Dock = DockStyle.Fill };
@@ -693,7 +723,7 @@ sealed partial class Pilot : Form
         var clear = new Button { Text = "Remove selected", AutoSize = true }; clear.Click += (_, _) => { if (ml.SelectedIndex >= 0) { config.Monitors.Remove(config.Monitors.Keys.ElementAt(ml.SelectedIndex)); Persist(); RefreshMonitors(); RebuildMenu(); } };
         mb.Controls.AddRange(new Control[] { pc, assign, clear }); monitors.Controls.Add(ml); monitors.Controls.Add(new Label { Dock = DockStyle.Top, Height = 50, Text = $"Current monitor geometry ({Screen.AllScreens.Length} screens):\n{Signature()}" }); monitors.Controls.Add(mb); RefreshMonitors();
         var about = new TabPage("About & help"); tabs.TabPages.Add(about);
-        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.4 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, state and stacking order. Loading a profile launches missing applications, except entries saved as minimized. Manual Restore brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency or telemetry. Update checks run only on request. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
+        about.Controls.Add(new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Text = "JetPane 1.1.4 — portable Windows layouts\r\nPublished by Atomic 22 Industries\r\n\r\nCtrl+Alt+S: Save. Ctrl+Alt+R: Restore. Ctrl+Alt+1–9: assigned profile.\r\nRight-click the tray icon for profiles, snapping, locks and toggles.\r\n\r\nProfiles save one window per application, including executable path, size, maximized state and stacking order. Minimized state is saved only when \"Remember minimized windows in profiles\" is enabled; then loading a profile keeps those windows minimized and does not launch them. Manual Restore always brings minimized entries back onto the screen.\r\n\r\nMonitor assignments take priority at startup. Geometry identifies a monitor setup. Snap layouts and profiles are separate modes. Locked snap slots remain reserved for their applications.\r\n\r\nOnly visible desktop windows with a saved normal size of at least 400×300 are managed. Explorer, ApplicationFrameHost, tool windows and cloaked windows are skipped. Administrator apps may reject movement.\r\n\r\nSettings, backups and crash.log stay beside this executable. Exit before moving the folder. Startup is optional and only changes through the tray menu. Disable it before moving or deleting this app.\r\n\r\nNo account, licence check, Store dependency or telemetry. Update checks run only on request. Export/import uses .wpilot files; PositionPro .ppro files are not supported.\r\n\r\nJetPane is an independent implementation from public documentation, not PositionPro source code." });
         var helpButton = new Button { Text = "Open detailed offline help", Dock = DockStyle.Bottom, Height = 38 };
         helpButton.Click += (_, _) => Help(); about.Controls.Add(helpButton);
         var updateButton = new Button { Text = "Check for updates…", Dock = DockStyle.Bottom, Height = 38 };

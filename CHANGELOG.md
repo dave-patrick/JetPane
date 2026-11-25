@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Drag and drop program arrangements: drag windows on the arrangement preview to build a layout, then Apply to move windows and save the profile; drag entries in Settings → Saved positions to reorder programs within a profile (stacking order is persisted with the profile).
+- Minimized windows are no longer saved or restored by default. Enable "Remember minimized windows in profiles" in the tray menu to keep the previous behavior.
+
 ## 1.1.4 — 2026-10-19
 
 - Add manual GitHub update checks from the tray menu and Settings.
